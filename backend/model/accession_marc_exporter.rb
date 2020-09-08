@@ -64,7 +64,8 @@ class AccessionMarcExporter
 
   PaymentToProcess = Struct.new(:accession_id, :payment_date, :amount, :invoice_number, :fund_code, :cost_center, :spend_category) do
     def voyager_fund_code
-      [fund_code, (cost_center || '')[0], spend_category].compact.join.gsub(/[^a-zA-Z0-9\.]/, '')
+      # FIXME report on those greater than 10 characters?
+      [fund_code, (cost_center || '')[0], spend_category].compact.join.gsub(/[^a-zA-Z0-9]/, '')
     end
   end
 
