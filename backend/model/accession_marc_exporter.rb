@@ -23,7 +23,7 @@ class AccessionMarcExporter
     today = Date.today
 
     DB.open(false) do |db|
-      pp payments_to_process =  find_payments_to_process(db)
+      pp payments_to_process =  find_payments_to_process(db, today)
 
       # FIXME group payments by agent code -- payments_to_process.group_by{|payment| FIXME agent id}
       pp accession_ids = payments_to_process.map(&:accession_id).uniq
@@ -62,26 +62,34 @@ class AccessionMarcExporter
 
   private
 
-  PaymentToProcess = Struct.new(:accession_id, :payment_date, :amount, :invoice_number, :fund_code)
+  PaymentToProcess = Struct.new(:accession_id, :payment_date, :amount, :invoice_number, :fund_code, :cost_center, :spend_category) do
+    def voyager_fund_code
+      [fund_code, (cost_center || '')[0], spend_category].compact.join.gsub(/[^a-zA-Z0-9\.]/, '')
+    end
+  end
 
-  # -Payment Date is not in the future
-  # -OK to pay Boolean equals True
-  # -Payment Sent Date is empty
-  def find_payments_to_process(db)
+  def find_payments_to_process(db, today)
     db[:payment_summary]
       .join(:payment, Sequel.qualify(:payment, :payment_summary_id) => Sequel.qualify(:payment, :id))
-      .filter{ Sequel.qualify(:payment, :payment_date) < Date.today}
+      .filter{ Sequel.qualify(:payment, :payment_date) <= today}
+      .filter(Sequel.qualify(:payment, :ok_to_pay) => 1)
+      .filter(Sequel.qualify(:payment, :date_paid) => nil)
+      .filter{ Sequel.qualify(:payment, :payment_date) < today}
       .select(Sequel.qualify(:payment_summary, :accession_id),
               Sequel.qualify(:payment, :payment_date),
               Sequel.qualify(:payment, :invoice_number),
               Sequel.qualify(:payment, :fund_code_id),
+              Sequel.qualify(:payment, :cost_center_id),
+              Sequel.qualify(:payment, :spend_category_id),
               Sequel.qualify(:payment, :amount))
       .map do |row|
       PaymentToProcess.new(row[:accession_id],
                            row[:payment_date],
                            row[:amount],
                            row[:invoice_number],
-                           BackendEnumSource.value_for_id('payment_fund_code', row[:fund_code_id]))
+                           BackendEnumSource.value_for_id('payment_fund_code', row[:fund_code_id]),
+                           BackendEnumSource.value_for_id('payments_module_cost_center', row[:cost_center_id]),
+                           BackendEnumSource.value_for_id('payments_module_spend_category', row[:spend_category_id]))
     end
   end
 

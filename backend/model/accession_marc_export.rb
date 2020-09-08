@@ -37,8 +37,8 @@ class AccessionMARCExport
       record.append(MARC::ControlField.new('001', @accession.uri))
       record.append(MARC::DataField.new('245', '0',  ' ', ['a', @accession.title]))
       record.append(MARC::DataField.new('980', ' ',  ' ', ['b', "%05.2f" % (payment.amount || 0.0)]))
-      record.append(MARC::DataField.new('981', ' ',  ' ', ['b', 'beints'])) #FIXME make configurable
-      record.append(MARC::DataField.new('981', ' ',  ' ', ['c', payment.fund_code]))
+      record.append(MARC::DataField.new('981', ' ',  ' ', ['b', AppConfig[:yale_accession_marc_export_location_code]]))
+      record.append(MARC::DataField.new('981', ' ',  ' ', ['c', payment.voyager_fund_code]))
       record.append(MARC::DataField.new('982', ' ',  ' ', ['a', payment.invoice_number]))
       record.append(MARC::DataField.new('982', ' ',  ' ', ['e', @accession.identifier]))
 
