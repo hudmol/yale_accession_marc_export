@@ -4,4 +4,3 @@ source 'https://rubygems.org'
 
 gem 'aws-sdk-s3', '~> 1'
 gem 'marc'
-gem 'net-sftp'

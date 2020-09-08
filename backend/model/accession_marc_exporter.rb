@@ -3,7 +3,16 @@ require 'pp'
 class AccessionMarcExporter
 
   def self.run!
-    new.run_round
+    10.times.each do
+      begin
+        return new.run_round
+      rescue
+        Log.error('AccessionMarcExporter run_round failed:')
+        Log.exception($!)
+
+        sleep 300
+      end
+    end
   end
 
   def run_round
@@ -13,7 +22,7 @@ class AccessionMarcExporter
 
     today = Date.today
 
-    DB.open do |db|
+    DB.open(false) do |db|
       pp payments_to_process =  find_payments_to_process(db)
 
       # FIXME group payments by agent code -- payments_to_process.group_by{|payment| FIXME agent id}
@@ -25,18 +34,22 @@ class AccessionMarcExporter
       # Accession.sequel_to_jsonmodel(Accession.filter(:id => accession_ids).all).map{|accession| [accession.id, accession]}.to_h
       accessions_map = build_accession_data(db, accession_ids)
 
+      # payments_to_process.each do |agent_code, payments|
       payments_to_process.each do |payment|
-        marc = nil
-        begin
-          marc = AccessionMARCExport.new(accessions_map.fetch(payment.accession_id),
-                                         agent,
-                                         [payment],
-                                         today)
+        DB.open do |db|
+          marc = nil
+          begin
+            marc = AccessionMARCExport.new(accessions_map.fetch(payment.accession_id),
+                                           agent,
+                                           [payment],
+                                           today)
 
-          upload_marc_export(marc)
-        ensure
-          if marc
-            marc.finished!
+            upload_marc_export(marc)
+            # mark_payments_as_processed(payment)
+          ensure
+            if marc
+              marc.finished!
+            end
           end
         end
       end
@@ -75,10 +88,13 @@ class AccessionMarcExporter
   def upload_marc_export(marc)
     if AppConfig[:yale_accession_marc_export_target].to_s == 's3'
       Log.debug("AccessionMarcExporter uploading file #{marc.filename} to S3")
-      AWSUploader.upload!(marc.filename, marc.file)
+      AWSUploader.upload!(marc.filename, marc.file.path)
+
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'sftp'
       Log.debug("AccessionMarcExporter uploading file #{marc.filename} to SFTP")
-      SFTPUploader.upload!(marc.filename, marc.file)
+      @sftp_uploader ||= SFTPUploader.new
+      @sftp_uploader.upload!(marc.filename, marc.file.path)
+
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'local'
       Log.debug("AccessionMarcExporter storing file #{marc.filename} locally at #{AppConfig[:yale_accession_marc_export_path]}")
       unless File.directory?(AppConfig[:yale_accession_marc_export_path])

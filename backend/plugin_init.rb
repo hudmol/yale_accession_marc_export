@@ -2,3 +2,5 @@
 #                                              :tags => 'yale_accession_marc_export') do
 #   AccessionMarcExporter.run!
 # end
+
+# TODO check upload config
