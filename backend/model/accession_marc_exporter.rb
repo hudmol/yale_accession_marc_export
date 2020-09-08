@@ -28,8 +28,8 @@ class AccessionMarcExporter
       # FIXME group payments by agent code -- payments_to_process.group_by{|payment| FIXME agent id}
       pp accession_ids = payments_to_process.map(&:accession_id).uniq
 
-      # FIXME resolve agent from agent code
-      agent = AgentCorporateEntity.to_jsonmodel(93)
+      # FIXME resolve agent vendor code from the payment's accession
+      agency_vender_code = 'BHOR'
 
       # Accession.sequel_to_jsonmodel(Accession.filter(:id => accession_ids).all).map{|accession| [accession.id, accession]}.to_h
       accessions_map = build_accession_data(db, accession_ids)
@@ -40,7 +40,7 @@ class AccessionMarcExporter
           marc = nil
           begin
             marc = AccessionMARCExport.new(accessions_map.fetch(payment.accession_id),
-                                           agent,
+                                           agency_vender_code,
                                            [payment],
                                            today)
 

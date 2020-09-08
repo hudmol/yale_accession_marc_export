@@ -4,10 +4,10 @@ require 'tempfile'
 class AccessionMARCExport
   attr_reader :file
 
-  def initialize(accession_data, agent, payments, date_run)
+  def initialize(accession_data, agent_vendor_code, payments, date_run)
     @file = Tempfile.new('AccessionMARCExport')
     @accession = accession_data
-    @agent = agent
+    @agent_vendor_code = agent_vendor_code
     @payments = payments
     @date_run = date_run
 
@@ -18,7 +18,7 @@ class AccessionMARCExport
     # [4-letter vendor code]+[-A][-yyyymmdd].txt
     # Example filename: BHOR-A-20200902.txt
     # FIXME
-    "BHOR-A-#{@date_run.iso8601}.txt"
+    "#{@agent_vendor_code}-A-#{@date_run.iso8601}.txt"
   end
 
   def finished!
