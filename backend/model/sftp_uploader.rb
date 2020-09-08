@@ -22,4 +22,8 @@ class SFTPUploader
     @sftp_client.put(file_path, target_path)
   end
 
+  def test_connection
+    @sftp_client.ls(AppConfig[:yale_accession_marc_export_sftp_target_directory]) || raise("Unable to connect to SFTP and ls target directory")
+  end
+
 end

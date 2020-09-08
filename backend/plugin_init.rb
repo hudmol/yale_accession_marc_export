@@ -3,4 +3,24 @@
 #   AccessionMarcExporter.run!
 # end
 
-# TODO check upload config
+if AppConfig[:yale_accession_marc_export_target].to_s == 's3'
+  Log.info("AccessionMarcExporter: Checking AWS S3 connection...")
+  begin
+    AWSUploader.new.test_connection
+  rescue
+    Log.exception($!)
+    raise $!
+  end
+  Log.info("AccessionMarcExporter: OK!")
+end
+
+if AppConfig[:yale_accession_marc_export_target].to_s == 'sftp'
+  Log.info("AccessionMarcExporter: Checking SFTP connection...")
+  begin
+    SFTPUploader.new.test_connection
+  rescue
+    Log.exception($!)
+    raise $!
+  end
+  Log.info("AccessionMarcExporter: OK!")
+end

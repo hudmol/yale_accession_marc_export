@@ -88,7 +88,8 @@ class AccessionMarcExporter
   def upload_marc_export(marc)
     if AppConfig[:yale_accession_marc_export_target].to_s == 's3'
       Log.debug("AccessionMarcExporter uploading file #{marc.filename} to S3")
-      AWSUploader.upload!(marc.filename, marc.file.path)
+      @aws_uploader ||= AWSUploader.new
+      @aws_uploader.upload!(marc.filename, marc.file.path)
 
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'sftp'
       Log.debug("AccessionMarcExporter uploading file #{marc.filename} to SFTP")
