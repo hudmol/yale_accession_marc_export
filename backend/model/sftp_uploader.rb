@@ -1,10 +1,10 @@
-require File.join(File.expand_path(File.dirname(__FILE__)), '..', 'lib', 'jzlib-1.1.3.jar')
-require File.join(File.expand_path(File.dirname(__FILE__)), '..', 'lib', 'sshj-0.30.0.jar')
-require File.join(File.expand_path(File.dirname(__FILE__)), '..', 'lib', 'asn-one-0.4.0.jar')
-require File.join(File.expand_path(File.dirname(__FILE__)), '..', 'lib', 'bcpkix-jdk15on-1.66.jar')
-require File.join(File.expand_path(File.dirname(__FILE__)), '..', 'lib', 'slf4j-api-1.7.7.jar')
-require File.join(File.expand_path(File.dirname(__FILE__)), '..', 'lib', 'eddsa-0.3.0.jar')
-require File.join(File.expand_path(File.dirname(__FILE__)), '..', 'lib', 'bcprov-jdk15on-1.66.jar')
+require File.join(File.dirname(__FILE__), '..', 'lib', 'jzlib-1.1.3.jar')
+require File.join(File.dirname(__FILE__), '..', 'lib', 'sshj-0.30.0.jar')
+require File.join(File.dirname(__FILE__), '..', 'lib', 'asn-one-0.4.0.jar')
+require File.join(File.dirname(__FILE__), '..', 'lib', 'bcpkix-jdk15on-1.66.jar')
+require File.join(File.dirname(__FILE__), '..', 'lib', 'slf4j-api-1.7.7.jar')
+require File.join(File.dirname(__FILE__), '..', 'lib', 'eddsa-0.3.0.jar')
+require File.join(File.dirname(__FILE__), '..', 'lib', 'bcprov-jdk15on-1.66.jar')
 
 class SFTPUploader
 
