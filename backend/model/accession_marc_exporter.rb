@@ -88,12 +88,11 @@ class AccessionMarcExporter
   end
 
   def find_payments_to_process(db, today)
-    db[:payment_summary]
-      .join(:payment, Sequel.qualify(:payment, :payment_summary_id) => Sequel.qualify(:payment, :id))
+    db[:payment]
+      .join(:payment_summary, Sequel.qualify(:payment, :payment_summary_id) => Sequel.qualify(:payment_summary, :id))
       .filter{ Sequel.qualify(:payment, :payment_date) <= today}
       .filter(Sequel.qualify(:payment, :ok_to_pay) => 1)
       .filter(Sequel.qualify(:payment, :date_paid) => nil)
-      .filter{ Sequel.qualify(:payment, :payment_date) < today}
       .select(Sequel.qualify(:payment_summary, :accession_id),
               Sequel.as(Sequel.qualify(:payment, :id), :payment_id),
               Sequel.qualify(:payment, :payment_date),
