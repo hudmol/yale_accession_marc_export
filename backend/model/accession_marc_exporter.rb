@@ -1,5 +1,3 @@
-require 'pp'
-
 class AccessionMarcExporter
 
   def self.run!
