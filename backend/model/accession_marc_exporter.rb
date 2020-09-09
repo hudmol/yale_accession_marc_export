@@ -71,7 +71,11 @@ class AccessionMarcExporter
 
   PaymentToProcess = Struct.new(:accession_id, :payment_id, :payment_date, :amount, :invoice_number, :fund_code, :cost_center, :spend_category, :vendor_code) do
     def voyager_fund_code
-      [fund_code, (cost_center || '')[0], spend_category].compact.join.gsub(/[^a-zA-Z0-9]/, '')
+      [
+        fund_code,
+        cost_center.to_s[-1],
+        spend_category.to_s[-3..-1]
+      ].compact.join.gsub(/[^a-zA-Z0-9]/, '')
     end
   end
 
