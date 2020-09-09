@@ -4,10 +4,10 @@ require 'tempfile'
 class AccessionMARCExport
   attr_reader :file
 
-  def initialize(accession_data, agent_vendor_code, payments, date_run)
+  def initialize(accession_data, vendor_code, payments, date_run)
     @file = Tempfile.new('AccessionMARCExport')
     @accession = accession_data
-    @agent_vendor_code = agent_vendor_code
+    @vendor_code = vendor_code
     @payments = payments
     @date_run = date_run
 
@@ -18,7 +18,7 @@ class AccessionMARCExport
     # [4-letter vendor code]+[-A][-yyyymmdd].txt
     # Example filename: BHOR-A-20200902.txt
     # FIXME
-    "#{@agent_vendor_code}-A-#{@date_run.iso8601}.txt"
+    "#{@vendor_code}-A-#{@date_run.iso8601}.txt"
   end
 
   def finished!
@@ -32,6 +32,10 @@ class AccessionMARCExport
   def marc_me!
     @payments.each_with_index do |payment, i|
       @file.write("\r\n") if i > 0
+
+      if payment.voyager_fund_code.length > 10
+        Log.warn("AccessionMarcExporter voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
+      end
 
       record = MARC::Record.new()
       record.append(MARC::ControlField.new('001', @accession.uri))
