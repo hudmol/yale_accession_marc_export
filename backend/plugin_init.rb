@@ -1,4 +1,4 @@
-if AppConfig.has_key?(:yale_accession_marc_export_schedule) &&  AppConfig[:yale_accession_marc_export_schedule]
+if AppConfig.has_key?(:yale_accession_marc_export_schedule) && AppConfig[:yale_accession_marc_export_schedule]
   ArchivesSpaceService.settings.scheduler.cron(AppConfig[:yale_accession_marc_export_schedule],
                                                :tags => 'yale_accession_marc_export') do
     AccessionMarcExporter.run!

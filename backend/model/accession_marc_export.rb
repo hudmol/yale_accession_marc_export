@@ -30,10 +30,6 @@ class AccessionMARCExport
     @payments.each_with_index do |payment, i|
       @file.write("\r\n") if i > 0
 
-      if payment.voyager_fund_code.length > 10
-        Log.warn("AccessionMarcExporter voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
-      end
-
       record = MARC::Record.new()
       record.append(MARC::ControlField.new('001', @accession.uri))
       record.append(MARC::DataField.new('245', '0',  ' ', ['a', @accession.title]))

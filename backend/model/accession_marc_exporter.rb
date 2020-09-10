@@ -1,22 +1,60 @@
+require 'mail'
+require 'stringio'
+
 class AccessionMarcExporter
 
-  def self.run!
-    10.times.each do
-      begin
-        return new.run_round
-      rescue
-        Log.error('AccessionMarcExporter run_round failed:')
-        Log.exception($!)
+  MAX_RETRIES = 10
+  RETRY_WAIT = 5 * 60
 
-        sleep 300
+  def self.run!
+    MAX_RETRIES.times.each do |i|
+      exporter = self.new
+
+      begin
+        exporter.run_round!
+        exporter.notify!("success")
+
+        return
+      rescue
+        exporter.log("AccessionMarcExporter run_round failed: #{$!.message}")
+        exporter.log($!.backtrace.join("\n"))
+
+        if i == MAX_RETRIES - 1
+          exporter.log("\n\nTried #{MAX_RETRIES} times. Giving up for the day.")
+        end
+
+        exporter.notify!("errored")
+
+        sleep RETRY_WAIT
       end
     end
   end
 
-  def run_round
-    Log.info(80.times.map{'*'}.join)
-    Log.info("AccessionMarcExporter running round at #{Time.now}")
-    Log.info(80.times.map{'*'}.join)
+  def notify!(subject_suffix = "")
+    if AppConfig.has_key?(:yale_accession_marc_export_email_delivery_method)
+      @log ||= StringIO.new
+
+      email_content = @log.string
+      mail = Mail.new do
+        from(AppConfig[:yale_accession_marc_export_email_from_address])
+        to(AppConfig[:yale_accession_marc_export_email_to_address])
+        subject("AccessionMarcExporter report - #{subject_suffix}")
+        body(email_content)
+      end
+
+      mail.delivery_method(AppConfig[:yale_accession_marc_export_email_delivery_method],
+                           AppConfig[:yale_accession_marc_export_email_delivery_method_settings])
+
+      mail.deliver
+
+      @log.truncate(0)
+    end
+  end
+
+  def run_round!
+    log(80.times.map{'*'}.join)
+    log("AccessionMarcExporter running round at #{Time.now}")
+    log(80.times.map{'*'}.join)
 
     today = Date.today
 
@@ -35,13 +73,19 @@ class AccessionMarcExporter
       payments_by_vendor.each do |vendor_code, payments|
         if vendor_code.nil?
           payments.each do |payment|
-            Log.debug("AccessionMarcExporter payment skipped as vendor code missing: #{payment}")
+            log("AccessionMarcExporter payment skipped as vendor code missing: #{payment}")
           end
 
           next
         end
 
-        Log.debug("AccessionMarcExporter processing #{payments.length} payments for vender #{vendor_code}")
+        log("AccessionMarcExporter processing #{payments.length} payments for vender #{vendor_code}")
+
+        payments.each do |payment|
+          if payment.voyager_fund_code.length > 10
+            Log.warn("AccessionMarcExporter voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
+          end
+        end
 
         DB.open do |db|
           marc = nil
@@ -62,9 +106,19 @@ class AccessionMarcExporter
       end
     end
 
-    Log.info(80.times.map{'*'}.join)
-    Log.info("AccessionMarcExporter finished round at #{Time.now}")
-    Log.info(80.times.map{'*'}.join)
+    log(80.times.map{'*'}.join)
+    log("AccessionMarcExporter finished round at #{Time.now}")
+    log(80.times.map{'*'}.join)
+  end
+
+  def log(message)
+    if AppConfig.has_key?(:yale_accession_marc_export_email_delivery_method)
+      @log ||= StringIO.new
+      @log << message
+      @log << "\n"
+    end
+
+    Log.info("%s: %s" % ['AccessionMarcExporter', message])
   end
 
   private
@@ -146,17 +200,17 @@ class AccessionMarcExporter
 
   def upload_marc_export(marc)
     if AppConfig[:yale_accession_marc_export_target].to_s == 's3'
-      Log.debug("AccessionMarcExporter uploading file #{marc.filename} to S3")
+      log("AccessionMarcExporter uploading file #{marc.filename} to S3")
       @aws_uploader ||= AWSUploader.new
       @aws_uploader.upload!(marc.filename, marc.file.path)
 
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'sftp'
-      Log.debug("AccessionMarcExporter uploading file #{marc.filename} to SFTP")
+      log("AccessionMarcExporter uploading file #{marc.filename} to SFTP")
       @sftp_uploader ||= SFTPUploader.new
       @sftp_uploader.upload!(marc.filename, marc.file.path)
 
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'local'
-      Log.debug("AccessionMarcExporter storing file #{marc.filename} locally at #{AppConfig[:yale_accession_marc_export_path]}")
+      log("AccessionMarcExporter storing file #{marc.filename} locally at #{AppConfig[:yale_accession_marc_export_path]}")
       unless File.directory?(AppConfig[:yale_accession_marc_export_path])
         FileUtils.mkdir_p(AppConfig[:yale_accession_marc_export_path])
       end
