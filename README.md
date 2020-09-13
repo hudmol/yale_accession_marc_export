@@ -37,11 +37,11 @@ See also:
 ## Configuration
 
 ```
-AppConfig[:yale_marc_export_schedule] = '15 0 * * *' # 00:15 daily
+AppConfig[:yale_accession_marc_export_schedule] = '15 0 * * *' # 00:15 daily
 AppConfig[:yale_accession_marc_export_location_code] = 'beints'
 ```
 
-Note: leave `AppConfig[:yale_marc_export_schedule]` blank or set to `nil` to disable the export task.
+Note: leave `AppConfig[:yale_accession_marc_export_schedule]` blank or set to `nil` to disable the export task.
 
 ### Export to local file system
 ```
@@ -77,7 +77,7 @@ AppConfig[:yale_accession_marc_export_sftp_target_directory] = '/upload'
 Run export round (development only):
 
 ```
-AppConfig[:yale_marc_export_enable_test_endpoint] = true
+AppConfig[:yale_accession_marc_export_enable_test_endpoint] = true
 ```
 
 ```

@@ -1,5 +1,5 @@
 class ArchivesSpaceService < Sinatra::Base
-  if AppConfig.has_key?(:yale_marc_export_enable_test_endpoint) && AppConfig[:yale_marc_export_enable_test_endpoint]
+  if AppConfig.has_key?(:yale_accession_marc_export_enable_test_endpoint) && AppConfig[:yale_accession_marc_export_enable_test_endpoint]
     Endpoint.get('/run-marc-export')
       .description("For testing")
       .permissions([])
