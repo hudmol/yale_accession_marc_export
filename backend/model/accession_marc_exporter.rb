@@ -16,6 +16,7 @@ class AccessionMarcExporter
 
         return
       rescue
+        exporter.log(80.times.map{'!'}.join)
         exporter.log("Error running round: #{$!.message}")
         exporter.log($!.backtrace.join("\n"))
 
@@ -61,46 +62,51 @@ class AccessionMarcExporter
 
     DB.open(false) do |db|
       payments_to_process =  find_payments_to_process(db, today)
-      accession_ids = payments_to_process.map(&:accession_id).uniq
-      vendors_map = find_vendor_codes_for_accessions(db, accession_ids)
-      accessions_map = build_accession_data(db, accession_ids)
 
-      payments_to_process.each do |payment|
-        payment.vendor_code = vendors_map.fetch(payment.accession_id, nil)
-      end
+      if payments_to_process.empty?
+        log("No payments to process")
+      else
+        accession_ids = payments_to_process.map(&:accession_id).uniq
+        vendors_map = find_vendor_codes_for_accessions(db, accession_ids)
+        accessions_map = build_accession_data(db, accession_ids)
 
-      payments_by_vendor = payments_to_process.group_by(&:vendor_code)
+        payments_to_process.each do |payment|
+          payment.vendor_code = vendors_map.fetch(payment.accession_id, nil)
+        end
 
-      payments_by_vendor.each do |vendor_code, payments|
-        if vendor_code.nil?
+        payments_by_vendor = payments_to_process.group_by(&:vendor_code)
+
+        payments_by_vendor.each do |vendor_code, payments|
+          if vendor_code.nil?
+            payments.each do |payment|
+              log("Payment skipped as vendor code missing: #{payment}")
+            end
+
+            next
+          end
+
+          log("Processing #{payments.length} payments for vendor #{vendor_code}")
+
           payments.each do |payment|
-            log("Payment skipped as vendor code missing: #{payment}")
+            if payment.voyager_fund_code.length > 10
+              log("Generated voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
+            end
           end
 
-          next
-        end
+          DB.open do |db|
+            marc = nil
+            begin
+              marc = AccessionMARCExport.new(accessions_map.fetch(payments.first.accession_id),
+                                             vendor_code,
+                                             payments,
+                                             today)
 
-        log("Processing #{payments.length} payments for vendor #{vendor_code}")
-
-        payments.each do |payment|
-          if payment.voyager_fund_code.length > 10
-            log("Generated voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
-          end
-        end
-
-        DB.open do |db|
-          marc = nil
-          begin
-            marc = AccessionMARCExport.new(accessions_map.fetch(payments.first.accession_id),
-                                           vendor_code,
-                                           payments,
-                                           today)
-
-            upload_marc_export(marc)
-            mark_payments_as_processed(db, payments, today)
-          ensure
-            if marc
-              marc.finished!
+              upload_marc_export(marc)
+              mark_payments_as_processed(db, payments, today)
+            ensure
+              if marc
+                marc.finished!
+              end
             end
           end
         end
