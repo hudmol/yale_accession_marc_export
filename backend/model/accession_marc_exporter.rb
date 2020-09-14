@@ -16,7 +16,7 @@ class AccessionMarcExporter
 
         return
       rescue
-        exporter.log("AccessionMarcExporter run_round failed: #{$!.message}")
+        exporter.log("Error running round: #{$!.message}")
         exporter.log($!.backtrace.join("\n"))
 
         if i == MAX_RETRIES - 1
@@ -53,7 +53,7 @@ class AccessionMarcExporter
 
   def run_round!
     log(80.times.map{'*'}.join)
-    log("AccessionMarcExporter running round at #{Time.now}")
+    log("Running round at #{Time.now}")
     log(80.times.map{'*'}.join)
     log("\n")
 
@@ -74,17 +74,17 @@ class AccessionMarcExporter
       payments_by_vendor.each do |vendor_code, payments|
         if vendor_code.nil?
           payments.each do |payment|
-            log("AccessionMarcExporter payment skipped as vendor code missing: #{payment}")
+            log("Payment skipped as vendor code missing: #{payment}")
           end
 
           next
         end
 
-        log("AccessionMarcExporter processing #{payments.length} payments for vender #{vendor_code}")
+        log("Processing #{payments.length} payments for vendor #{vendor_code}")
 
         payments.each do |payment|
           if payment.voyager_fund_code.length > 10
-            log("AccessionMarcExporter voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
+            log("Generated voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
           end
         end
 
@@ -109,7 +109,7 @@ class AccessionMarcExporter
 
     log("\n")
     log(80.times.map{'*'}.join)
-    log("AccessionMarcExporter finished round at #{Time.now}")
+    log("Finished round at #{Time.now}")
     log(80.times.map{'*'}.join)
   end
 
@@ -203,17 +203,17 @@ class AccessionMarcExporter
 
   def upload_marc_export(marc)
     if AppConfig[:yale_accession_marc_export_target].to_s == 's3'
-      log("AccessionMarcExporter uploading file #{marc.filename} to S3")
+      log("Uploading file #{marc.filename} to S3")
       @aws_uploader ||= AWSUploader.new
       @aws_uploader.upload!(marc.filename, marc.file.path)
 
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'sftp'
-      log("AccessionMarcExporter uploading file #{marc.filename} to SFTP")
+      log("Uploading file #{marc.filename} to SFTP")
       @sftp_uploader ||= SFTPUploader.new
       @sftp_uploader.upload!(marc.filename, marc.file.path)
 
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'local'
-      log("AccessionMarcExporter storing file #{marc.filename} locally at #{AppConfig[:yale_accession_marc_export_path]}")
+      log("Storing file #{marc.filename} locally at #{AppConfig[:yale_accession_marc_export_path]}")
       unless File.directory?(AppConfig[:yale_accession_marc_export_path])
         FileUtils.mkdir_p(AppConfig[:yale_accession_marc_export_path])
       end
