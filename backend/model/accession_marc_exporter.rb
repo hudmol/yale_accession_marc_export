@@ -55,6 +55,7 @@ class AccessionMarcExporter
     log(80.times.map{'*'}.join)
     log("AccessionMarcExporter running round at #{Time.now}")
     log(80.times.map{'*'}.join)
+    log("\n")
 
     today = Date.today
 
@@ -83,7 +84,7 @@ class AccessionMarcExporter
 
         payments.each do |payment|
           if payment.voyager_fund_code.length > 10
-            Log.warn("AccessionMarcExporter voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
+            log("AccessionMarcExporter voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
           end
         end
 
@@ -106,6 +107,7 @@ class AccessionMarcExporter
       end
     end
 
+    log("\n")
     log(80.times.map{'*'}.join)
     log("AccessionMarcExporter finished round at #{Time.now}")
     log(80.times.map{'*'}.join)
@@ -138,7 +140,9 @@ class AccessionMarcExporter
       .filter(:id => payments.map(&:payment_id))
       .update(:date_paid => today)
 
-    Accession.update_mtime_for_ids(payments.map(&:accession_id))
+    db[:accession]
+      .filter(:id => payments.map(&:accession_id))
+      .update(:lock_version => Sequel.expr(1) + :lock_version, :system_mtime => Time.now)
   end
 
   def find_payments_to_process(db, today)
@@ -182,7 +186,6 @@ class AccessionMarcExporter
       .filter(Sequel.qualify(:linked_agents_rlshp, :accession_id) => accession_ids)
       .filter(Sequel.qualify(:linked_agents_rlshp, :role_id) => BackendEnumSource.id_for_value('linked_agent_role', 'source'))
       .select(Sequel.qualify(:linked_agents_rlshp, :accession_id),
-              Sequel.qualify(:linked_agents_rlshp, :agent_corporate_entity_id),
               Sequel.as(Sequel.qualify(:agent_person, :vendor_code), :agent_person_vendor_code),
               Sequel.as(Sequel.qualify(:agent_corporate_entity, :vendor_code), :agent_corporate_entity_vendor_code),
               Sequel.as(Sequel.qualify(:agent_family, :vendor_code), :agent_family_vendor_code),

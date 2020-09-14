@@ -28,8 +28,6 @@ class AccessionMARCExport
 
   def marc_me!
     @payments.each_with_index do |payment, i|
-      @file.write("\r\n") if i > 0
-
       record = MARC::Record.new()
       record.append(MARC::ControlField.new('001', @accession.uri))
       record.append(MARC::DataField.new('245', '0',  ' ', ['a', @accession.title]))
