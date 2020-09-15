@@ -1,5 +1,6 @@
 require 'mail'
 require 'stringio'
+require 'set'
 
 class AccessionMarcExporter
 
@@ -71,7 +72,12 @@ class AccessionMarcExporter
         accessions_map = build_accession_data(db, accession_ids)
 
         payments_to_process.each do |payment|
-          payment.vendor_code = vendors_map.fetch(payment.accession_id, nil)
+          vendors = vendors_map.fetch(payment.accession_id, [])
+          if vendors.length > 1
+            log("ACTION REQUIRED: Payment is associated with two or more vendors and will be skipped - vendors: #{vendors.to_a}, payment: #{payment}")
+          else
+            payment.vendor_code = vendors.first
+          end
         end
 
         payments_by_vendor = payments_to_process.group_by(&:vendor_code)
@@ -79,7 +85,7 @@ class AccessionMarcExporter
         payments_by_vendor.each do |vendor_code, payments|
           if vendor_code.nil?
             payments.each do |payment|
-              log("Payment skipped as vendor code missing: #{payment}")
+              log("ACTION REQUIRED: Payment skipped as vendor code missing: #{payment}")
             end
 
             next
@@ -89,7 +95,7 @@ class AccessionMarcExporter
 
           payments.each do |payment|
             if payment.voyager_fund_code.length > 10
-              log("Generated voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
+              log("WARNING: Generated voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
             end
           end
 
@@ -169,7 +175,7 @@ class AccessionMarcExporter
       PaymentToProcess.new(row[:accession_id],
                            row[:payment_id],
                            row[:payment_date],
-                           row[:amount],
+                           ("%.2f" % (row[:amount] || 0.0)),
                            row[:invoice_number],
                            BackendEnumSource.value_for_id('payment_fund_code', row[:fund_code_id]),
                            BackendEnumSource.value_for_id('payments_module_cost_center', row[:cost_center_id]),
@@ -178,6 +184,8 @@ class AccessionMarcExporter
   end
 
   def find_vendor_codes_for_accessions(db, accession_ids)
+    result = {}
+
     db[:linked_agents_rlshp]
       .left_join(:agent_person, Sequel.qualify(:agent_person, :id) => Sequel.qualify(:linked_agents_rlshp, :agent_person_id))
       .left_join(:agent_corporate_entity, Sequel.qualify(:agent_corporate_entity, :id) => Sequel.qualify(:linked_agents_rlshp, :agent_corporate_entity_id))
@@ -191,20 +199,21 @@ class AccessionMarcExporter
       ))
       .filter(Sequel.qualify(:linked_agents_rlshp, :accession_id) => accession_ids)
       .filter(Sequel.qualify(:linked_agents_rlshp, :role_id) => BackendEnumSource.id_for_value('linked_agent_role', 'source'))
+      .filter(Sequel.qualify(:linked_agents_rlshp, :relator_id) => BackendEnumSource.id_for_value('linked_agent_archival_record_relators', 'bsl'))
       .select(Sequel.qualify(:linked_agents_rlshp, :accession_id),
               Sequel.as(Sequel.qualify(:agent_person, :vendor_code), :agent_person_vendor_code),
               Sequel.as(Sequel.qualify(:agent_corporate_entity, :vendor_code), :agent_corporate_entity_vendor_code),
               Sequel.as(Sequel.qualify(:agent_family, :vendor_code), :agent_family_vendor_code),
               Sequel.as(Sequel.qualify(:agent_software, :vendor_code), :agent_software_vendor_code))
-      .map do |row|
+      .each do |row|
       vendor_code = row[:agent_person_vendor_code] || row[:agent_corporate_entity_vendor_code] || row[:agent_family_vendor_code] || row[:agent_software_vendor_code]
       next if vendor_code.nil?
 
-      [
-        row[:accession_id],
-        vendor_code
-      ]
-    end.compact.to_h
+      result[row[:accession_id]] ||= Set.new
+      result[row[:accession_id]] << vendor_code
+    end
+
+    result
   end
 
   def upload_marc_export(marc)
