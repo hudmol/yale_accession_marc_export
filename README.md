@@ -25,7 +25,7 @@ Enable the plugin by editing the file in `config/config.rb`:
 
 (Make sure you uncomment this line (i.e., remove the leading '#' if present))
 
-Install dependencies by initializing the plugin:
+Install Ruby gem dependencies by initializing the plugin:
 
     $ cd /path/to/archivesspace
     $ ./scripts/initialize-plugin.sh yale_accession_marc_export
@@ -33,6 +33,10 @@ Install dependencies by initializing the plugin:
 See also:
 
   https://archivesspace.github.io/archivesspace/user/archivesspace-plug-ins/
+
+## Dependencies
+
+This plugin requires the payments_module plugin (v1.3 or higher) be installed and running. Find this plugin here: https://github.com/hudmol/payments_module.
 
 ## Configuration
 
