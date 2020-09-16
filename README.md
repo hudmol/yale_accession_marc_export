@@ -76,6 +76,42 @@ AppConfig[:yale_accession_marc_export_sftp_password] = 'pass'
 AppConfig[:yale_accession_marc_export_sftp_target_directory] = '/upload'
 ```
 
+### Email Notifications
+
+By default the plugin will provide a running commentary of the export to the ArchivesSpace log.  If you would like to be emailed upon success or failure of the export you may configure these logs to be sent to an email of your choice.  For example:
+
+```
+# disabled
+# - leave blank
+# AppConfig[:yale_accession_marc_export_email_delivery_method]
+
+# sendmail
+AppConfig[:yale_accession_marc_export_email_delivery_method] = :sendmail
+AppConfig[:yale_accession_marc_export_email_delivery_method_settings] = {
+    :sendmail_settings => {
+        ...
+    }
+}
+AppConfig[:yale_accession_marc_export_email_from_address] = 'your@email.com'
+AppConfig[:yale_accession_marc_export_email_to_address] = 'your@email.com'
+
+# SMTP
+AppConfig[:yale_accession_marc_export_email_delivery_method] = :smtp
+AppConfig[:yale_accession_marc_export_email_delivery_method_settings] = {
+    :smtp_settings => {
+        :address => 'your.smtp.com',
+        :port => 25,
+        :user_name => 'smtpusername',
+        :password => 'pw',
+        ...
+    }
+}
+AppConfig[:yale_accession_marc_export_email_from_address] = 'your@email.com'
+AppConfig[:yale_accession_marc_export_email_to_address] = 'your@email.com'
+```
+
+For full configuration settings, please see https://guides.rubyonrails.org/action_mailer_basics.html#action-mailer-configuration.
+
 # Development/testing notes
 
 Run export round (development only):
