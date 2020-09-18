@@ -148,13 +148,18 @@ class AccessionMarcExporter
   end
 
   def mark_payments_as_processed(db, payments, today)
+    now = Time.now
+
     db[:payment]
       .filter(:id => payments.map(&:payment_id))
       .update(:date_paid => today)
 
     db[:accession]
       .filter(:id => payments.map(&:accession_id))
-      .update(:lock_version => Sequel.expr(1) + :lock_version, :system_mtime => Time.now)
+      .update(:lock_version => Sequel.expr(1) + :lock_version,
+              :system_mtime => now,
+              :user_mtime => now,
+              :last_modified_by => 'AccessionMarcExporter')
   end
 
   def find_payments_to_process(db, today)
