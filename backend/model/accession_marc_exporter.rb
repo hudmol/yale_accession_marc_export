@@ -91,7 +91,7 @@ class AccessionMarcExporter
             next
           end
 
-          log("Processing #{payments.length} payments for vendor #{vendor_code}")
+          log("Processing #{payments.length} #{pluralize('payment', '', 's', payments.length)} for vendor #{vendor_code}")
 
           payments.each do |payment|
             if payment.voyager_fund_code.length > 10
@@ -136,6 +136,12 @@ class AccessionMarcExporter
   end
 
   private
+
+  def pluralize(word, drop, add, count = 1)
+    return word if count == 1
+
+    word.gsub(/#{drop}$/, add)
+  end
 
   PaymentToProcess = Struct.new(:accession_id, :payment_id, :payment_date, :amount, :invoice_number, :fund_code, :cost_center, :spend_category, :vendor_code) do
     def voyager_fund_code
