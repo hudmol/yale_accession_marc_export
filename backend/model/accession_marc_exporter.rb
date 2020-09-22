@@ -2,6 +2,8 @@ require 'mail'
 require 'stringio'
 require 'set'
 
+require_relative 'pending_payments'
+
 class AccessionMarcExporter
 
   MAX_RETRIES = 10
@@ -62,60 +64,52 @@ class AccessionMarcExporter
     today = Date.today
 
     DB.open(false) do |db|
-      payments_to_process =  find_payments_to_process(db, today)
-
+      payments_to_process = PendingPayments.new(db, today, proc {|msg| log(msg)})
       if payments_to_process.empty?
         log("No payments to process")
-      else
-        accession_ids = payments_to_process.map(&:accession_id).uniq
-        vendors_map = find_vendor_codes_for_accessions(db, accession_ids)
-        accessions_map = build_accession_data(db, accession_ids)
+        return
+      end
 
-        payments_to_process.each do |payment|
-          vendors = vendors_map.fetch(payment.accession_id, [])
-          if vendors.length > 1
-            log("ACTION REQUIRED: Payment is associated with two or more vendors and will be skipped - vendors: #{vendors.to_a}, payment: #{payment}")
-          else
-            payment.vendor_code = vendors.first
+      exports_by_vendor = {}
+
+      payments_to_process.each do |accession, vendor_code, payment|
+        log("Processing payment for vendor #{vendor_code}")
+
+        exports_by_vendor[vendor_code] ||= {
+          :marc => AccessionMARCExport.new(vendor_code, today),
+          :payments => [],
+          :failed => false,
+        }
+
+        export = exports_by_vendor.fetch(vendor_code)
+        unless export[:failed]
+          begin
+            export[:marc].add_payment(accession, payment)
+            export[:payments] << payment
+          rescue
+            log("Error caught during process for vendor #{vendor_code} payment #{payment}: #{$!}")
+            export[:failed] = $!
           end
         end
+      end
 
-        payments_by_vendor = payments_to_process.group_by(&:vendor_code)
+      exports_by_vendor.each do |vendor_code, export|
+        next if export[:failed]
 
-        payments_by_vendor.each do |vendor_code, payments|
-          if vendor_code.nil?
-            payments.each do |payment|
-              log("ACTION REQUIRED: Payment skipped as vendor code missing: #{payment}")
-            end
+        DB.open do |db|
+          begin
+            upload_marc_export(export[:marc])
+            export[:marc].finished!
+            mark_payments_as_processed(db, export[:payments], today)
 
-            next
-          end
-
-          log("Processing #{payments.length} #{pluralize('payment', '', 's', payments.length)} for vendor #{vendor_code}")
-
-          payments.each do |payment|
-            if payment.voyager_fund_code.length > 10
-              log("WARNING: Generated voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
-            end
-          end
-
-          DB.open do |db|
-            marc = nil
-            begin
-              marc = AccessionMARCExport.new(accessions_map.fetch(payments.first.accession_id),
-                                             vendor_code,
-                                             payments,
-                                             today)
-
-              upload_marc_export(marc)
-              mark_payments_as_processed(db, payments, today)
-            ensure
-              if marc
-                marc.finished!
-              end
-            end
+            log("Processed #{export[:payments].length} #{pluralize('payment', '', 's', export[:payments].length)} for vendor #{vendor_code}")
           end
         end
+      end
+
+      if (failure = exports_by_vendor.values.find {|export| export[:failed]})
+        # Throw an exception to trigger a retry for this vendor.
+        raise failure[:failed]
       end
     end
 
@@ -143,16 +137,6 @@ class AccessionMarcExporter
     word.gsub(/#{drop}$/, add)
   end
 
-  PaymentToProcess = Struct.new(:accession_id, :payment_id, :payment_date, :amount, :invoice_number, :fund_code, :cost_center, :spend_category, :vendor_code) do
-    def voyager_fund_code
-      [
-        fund_code,
-        cost_center.to_s[-1],
-        spend_category.to_s[-3..-1]
-      ].compact.join.gsub(/[^a-zA-Z0-9]/, '')
-    end
-  end
-
   def mark_payments_as_processed(db, payments, today)
     now = Time.now
 
@@ -168,64 +152,6 @@ class AccessionMarcExporter
               :last_modified_by => 'AccessionMarcExporter')
   end
 
-  def find_payments_to_process(db, today)
-    db[:payment]
-      .join(:payment_summary, Sequel.qualify(:payment, :payment_summary_id) => Sequel.qualify(:payment_summary, :id))
-      .filter{ Sequel.qualify(:payment, :payment_date) <= today}
-      .filter(Sequel.qualify(:payment, :ok_to_pay) => 1)
-      .filter(Sequel.qualify(:payment, :date_paid) => nil)
-      .select(Sequel.qualify(:payment_summary, :accession_id),
-              Sequel.as(Sequel.qualify(:payment, :id), :payment_id),
-              Sequel.qualify(:payment, :payment_date),
-              Sequel.qualify(:payment, :invoice_number),
-              Sequel.qualify(:payment, :fund_code_id),
-              Sequel.qualify(:payment, :cost_center_id),
-              Sequel.qualify(:payment_summary, :spend_category_id),
-              Sequel.qualify(:payment, :amount))
-      .map do |row|
-      PaymentToProcess.new(row[:accession_id],
-                           row[:payment_id],
-                           row[:payment_date],
-                           ("%.2f" % (row[:amount] || 0.0)),
-                           row[:invoice_number],
-                           BackendEnumSource.value_for_id('payment_fund_code', row[:fund_code_id]),
-                           BackendEnumSource.value_for_id('payments_module_cost_center', row[:cost_center_id]),
-                           BackendEnumSource.value_for_id('payments_module_spend_category', row[:spend_category_id]))
-    end
-  end
-
-  def find_vendor_codes_for_accessions(db, accession_ids)
-    result = {}
-
-    db[:linked_agents_rlshp]
-      .left_join(:agent_person, Sequel.qualify(:agent_person, :id) => Sequel.qualify(:linked_agents_rlshp, :agent_person_id))
-      .left_join(:agent_corporate_entity, Sequel.qualify(:agent_corporate_entity, :id) => Sequel.qualify(:linked_agents_rlshp, :agent_corporate_entity_id))
-      .left_join(:agent_family, Sequel.qualify(:agent_family, :id) => Sequel.qualify(:linked_agents_rlshp, :agent_family_id))
-      .left_join(:agent_software, Sequel.qualify(:agent_software, :id) => Sequel.qualify(:linked_agents_rlshp, :agent_software_id))
-      .filter(Sequel.|(
-        Sequel.~(Sequel.qualify(:agent_person, :vendor_code) => nil),
-        Sequel.~(Sequel.qualify(:agent_corporate_entity, :vendor_code) => nil),
-        Sequel.~(Sequel.qualify(:agent_family, :vendor_code) => nil),
-        Sequel.~(Sequel.qualify(:agent_software, :vendor_code) => nil),
-      ))
-      .filter(Sequel.qualify(:linked_agents_rlshp, :accession_id) => accession_ids)
-      .filter(Sequel.qualify(:linked_agents_rlshp, :role_id) => BackendEnumSource.id_for_value('linked_agent_role', 'source'))
-      .filter(Sequel.qualify(:linked_agents_rlshp, :relator_id) => BackendEnumSource.id_for_value('linked_agent_archival_record_relators', 'bsl'))
-      .select(Sequel.qualify(:linked_agents_rlshp, :accession_id),
-              Sequel.as(Sequel.qualify(:agent_person, :vendor_code), :agent_person_vendor_code),
-              Sequel.as(Sequel.qualify(:agent_corporate_entity, :vendor_code), :agent_corporate_entity_vendor_code),
-              Sequel.as(Sequel.qualify(:agent_family, :vendor_code), :agent_family_vendor_code),
-              Sequel.as(Sequel.qualify(:agent_software, :vendor_code), :agent_software_vendor_code))
-      .each do |row|
-      vendor_code = row[:agent_person_vendor_code] || row[:agent_corporate_entity_vendor_code] || row[:agent_family_vendor_code] || row[:agent_software_vendor_code]
-      next if vendor_code.nil?
-
-      result[row[:accession_id]] ||= Set.new
-      result[row[:accession_id]] << vendor_code
-    end
-
-    result
-  end
 
   def upload_marc_export(marc)
     if AppConfig[:yale_accession_marc_export_target].to_s == 's3'
@@ -249,21 +175,4 @@ class AccessionMarcExporter
     end
   end
 
-  AccessionData = Struct.new(:id, :title, :uri, :identifier)
-
-  def build_accession_data(db, accession_ids)
-    result = {}
-
-    db[:accession]
-      .filter(:id => accession_ids)
-      .select(:id, :title, :repo_id, :identifier)
-      .map do |row|
-      result[row[:id]] = AccessionData.new(row[:id],
-                                           row[:title],
-                                           JSONModel::JSONModel(:accession).uri_for(row[:id], :repo_id => row[:repo_id]),
-                                           ASUtils.json_parse(row[:identifier]).compact.join('-'))
-    end
-
-    result
-  end
 end
