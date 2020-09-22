@@ -12,7 +12,10 @@ class AccessionMARCExport
 
   def add_payment(accession, payment)
     record = MARC::Record.new()
-    record.append(MARC::ControlField.new('001', accession.uri))
+
+    four_part_id = [accession.id_0, accession.id_1, accession.id_2, accession.id_3].compact.join('-')
+
+    record.append(MARC::ControlField.new('001', "%s-%s" % [four_part_id, payment.payment_id]))
 
     # Multiple date records are merged together based on their respective types
     # (single & inclusive into subfield $f, bulk into subfield $g).  Title goes in
@@ -37,10 +40,18 @@ class AccessionMARCExport
     end
 
     record.append(MARC::DataField.new('980', ' ',  ' ', ['b', payment.amount]))
-    record.append(MARC::DataField.new('981', ' ',  ' ', ['b', AppConfig[:yale_accession_marc_export_location_code]]))
-    record.append(MARC::DataField.new('981', ' ',  ' ', ['c', payment.voyager_fund_code]))
-    record.append(MARC::DataField.new('982', ' ',  ' ', ['a', payment.invoice_number]))
-    record.append(MARC::DataField.new('982', ' ',  ' ', ['e', [accession.id_0, accession.id_1, accession.id_2, accession.id_3].compact.join('-')]))
+
+    MARC::DataField.new('981', ' ',  ' ').tap do |df|
+      df.append(MARC::Subfield.new('b', AppConfig[:yale_accession_marc_export_location_code]))
+      df.append(MARC::Subfield.new('c', payment.voyager_fund_code.strip)) unless payment.voyager_fund_code.to_s.strip.empty?
+      record.append(df)
+    end
+
+    MARC::DataField.new('982', ' ',  ' ').tap do |df|
+      df.append(MARC::Subfield.new('a', payment.invoice_number.strip)) unless payment.invoice_number.to_s.strip.empty?
+      df.append(MARC::Subfield.new('e', four_part_id))
+      record.append(df)
+    end
 
     Array(accession.extents).each do |extent|
       record.append(MARC::DataField.new('300', ' ', ' ',
