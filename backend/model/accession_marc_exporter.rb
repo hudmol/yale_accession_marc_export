@@ -65,6 +65,7 @@ class AccessionMarcExporter
 
     DB.open(false) do |db|
       payments_to_process = PendingPayments.new(db, today, proc {|msg| log(msg)})
+
       if payments_to_process.empty?
         log("No payments to process")
         return
@@ -99,10 +100,11 @@ class AccessionMarcExporter
         DB.open do |db|
           begin
             upload_marc_export(export[:marc])
-            export[:marc].finished!
             mark_payments_as_processed(db, export[:payments], today)
 
             log("Processed #{export[:payments].length} #{pluralize('payment', '', 's', export[:payments].length)} for vendor #{vendor_code}")
+          ensure
+            export[:marc].finished!
           end
         end
       end
