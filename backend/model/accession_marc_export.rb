@@ -86,15 +86,21 @@ class AccessionMARCExport
 
     # For linked agents, we want the same export rules as the standard ArchivesSpace
     # MARC export.
-    aspace_marc = MARCModel.from_aspace_object(nil, :include_unpublished => true)
-    aspace_marc.apply_map(JSONModel::JSONModel(:accession).new(accession), :linked_agents => :handle_agents)
-    aspace_marc.datafields.each do |datafield|
-      record.append(MARC::DataField.new(datafield.tag.to_s,
-                                        (datafield.ind1 || ' '),
-                                        (datafield.ind2 || ' '),
-                                        *(datafield.subfields.map {|subfield|
-                                            [subfield.code.to_s, subfield.text.to_s]
-                                          })))
+    if accession.linked_agents
+      accession.linked_agents.reject! {|agent| agent['role'] != 'creator'}
+
+      unless accession.linked_agents.empty?
+        aspace_marc = MARCModel.from_aspace_object(nil, :include_unpublished => true)
+        aspace_marc.apply_map(accession, :linked_agents => :handle_agents)
+        aspace_marc.datafields.each do |datafield|
+          record.append(MARC::DataField.new(datafield.tag.to_s,
+                                            (datafield.ind1 || ' '),
+                                            (datafield.ind2 || ' '),
+                                            *(datafield.subfields.map {|subfield|
+                                                [subfield.code.to_s, subfield.text.to_s]
+                                              })))
+        end
+      end
     end
 
     @file.write(MARC::Writer.encode(record))
