@@ -13,9 +13,14 @@ class AccessionMARCExport
   def add_payment(accession, payment)
     record = MARC::Record.new()
 
+    # UTF-8, baby
+    record.leader[9] = 'a'
+
     four_part_id = [accession.id_0, accession.id_1, accession.id_2, accession.id_3].compact.join('-')
 
-    record.append(MARC::ControlField.new('001', "%s-%s" % [four_part_id, payment.payment_id]))
+    # Decided we don't need this for now.
+    #
+    # record.append(MARC::ControlField.new('001', "%s-%s" % [four_part_id, payment.payment_id]))
 
     # Multiple date records are merged together based on their respective types
     # (single & inclusive into subfield $f, bulk into subfield $g).  Title goes in
@@ -27,7 +32,7 @@ class AccessionMARCExport
         subfields.merge('g' => (subfields['g'] + [extract_date(date)]))
       end
     }.tap do |date_subfields|
-      title_field = MARC::DataField.new('245', '0', ' ', ['a', accession.display_string])
+      title_field = MARC::DataField.new('245', '0', '0', ['a', accession.display_string])
       unless date_subfields['f'].empty?
         title_field.append(MARC::Subfield.new('f', date_subfields['f'].join(', ')))
       end
