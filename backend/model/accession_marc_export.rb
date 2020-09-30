@@ -108,6 +108,8 @@ class AccessionMARCExport
       end
     end
 
+    record.fields.sort_by!(&:tag)
+
     @file.write(MARC::Writer.encode(record))
     @file.flush
   end
