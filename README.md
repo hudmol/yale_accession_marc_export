@@ -76,6 +76,16 @@ AppConfig[:yale_accession_marc_export_sftp_password] = 'pass'
 AppConfig[:yale_accession_marc_export_sftp_target_directory] = '/upload'
 ```
 
+If you prefer to use an SSH key for authentication, you can specify
+`AppConfig[:yale_accession_marc_export_sftp_private_key_path]` instead
+of `AppConfig[:yale_accession_marc_export_sftp_password]`:
+
+```
+AppConfig[:yale_accession_marc_export_sftp_private_key_path] = '/path/to/id_rsa_file'
+```
+
+The SSH key should be unencrypted (i.e. should be passwordless).
+
 ### Email Notifications
 
 By default the plugin will provide a running commentary of the export to the ArchivesSpace log.  If you would like to be emailed upon success or failure of the export you may configure these logs to be sent to an email of your choice.  For example:
