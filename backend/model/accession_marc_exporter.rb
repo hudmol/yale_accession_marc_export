@@ -10,6 +10,8 @@ class AccessionMarcExporter
   RETRY_WAIT = 5 * 60
 
   def self.run!
+    Log.info("AccessionMarcExporter is off to the races!")
+
     MAX_RETRIES.times.each do |i|
       exporter = self.new
 
