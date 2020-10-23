@@ -132,12 +132,24 @@ class PendingPayments
   end
 
   PaymentToProcess = Struct.new(:accession_id, :payment_id, :payment_date, :amount, :invoice_number, :fund_code, :cost_center, :spend_category, :vendor_code) do
+
+    # Don't show these attributes when pretty-printing for emails and logging.
+    REDACTED = [:amount]
+
     def voyager_fund_code
       [
         fund_code,
         cost_center.to_s[-1],
         spend_category.to_s[-3..-1]
       ].compact.join.gsub(/[^a-zA-Z0-9]/, '')
+    end
+
+    def to_s
+      "#<Payment %s>" % [(self.members - REDACTED).map {|k| [k, self[k]]}.to_h]
+    end
+
+    def inspect
+      to_s
     end
   end
 
