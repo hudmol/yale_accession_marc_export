@@ -115,7 +115,11 @@ class AccessionMARCExport
   end
 
   def filename
-    "#{@vendor_code}-A-#{@date_run.iso8601}.txt"
+    extension = AppConfig.has_key?(:yale_accession_marc_export_file_extension) ?
+                  AppConfig[:yale_accession_marc_export_file_extension] :
+                  'txt'
+
+    "#{@vendor_code}-A-#{@date_run.iso8601}.#{extension}"
   end
 
   def finished!

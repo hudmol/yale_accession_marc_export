@@ -43,6 +43,9 @@ This plugin requires the payments_module plugin (v1.3 or higher) be installed an
 ```
 AppConfig[:yale_accession_marc_export_schedule] = '15 0 * * *' # 00:15 daily
 AppConfig[:yale_accession_marc_export_location_code] = 'beints'
+
+# Defaults to txt if not set, as Voyager currently requires this.
+AppConfig[:yale_accession_marc_export_file_extension] = 'txt'
 ```
 
 Note: leave `AppConfig[:yale_accession_marc_export_schedule]` blank or set to `nil` to disable the export task.
