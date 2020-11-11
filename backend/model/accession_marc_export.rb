@@ -78,7 +78,9 @@ class AccessionMARCExport
     end
 
     if (s = accession.access_restrictions_note.to_s.strip) && !s.empty?
-      record.append(MARC::DataField.new('506', ' ', ' ', ['a', s]))
+      ind1 = accession.access_restrictions ? '1' : '0'
+
+      record.append(MARC::DataField.new('506', ind1, ' ', ['a', s]))
     end
 
     if (s = accession.content_description.to_s.strip) && !s.empty?
