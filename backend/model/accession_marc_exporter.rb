@@ -3,6 +3,7 @@ require 'stringio'
 require 'set'
 require 'tempfile'
 require 'date'
+require 'time'
 
 require_relative 'pending_payments'
 
@@ -46,7 +47,7 @@ class AccessionMarcExporter
       temp.puts content.strip
       temp.flush
 
-      upload_file(temp.path, "job_status-#{Date.today.iso8601}.txt")
+      upload_file(temp.path, "job_status-#{Date.today.iso8601}-#{Time.now.strftime('%H%M%S')}.txt")
     end
 
     @log.truncate(0)
