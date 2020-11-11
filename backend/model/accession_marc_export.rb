@@ -110,6 +110,11 @@ class AccessionMARCExport
       end
     end
 
+    # If 100 or 110 is present, 245 ind1 = 1
+    if record['100'] || record['110']
+      record['245'].indicator1 = '1'
+    end
+
     record.fields.sort_by!(&:tag)
 
     @file.write(MARC::Writer.encode(record))
