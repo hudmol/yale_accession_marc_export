@@ -1,3 +1,5 @@
+require 'pp'
+
 class PendingPayments
 
   def initialize(db, date, logger = nil)
@@ -23,15 +25,15 @@ class PendingPayments
 
     @payments.each do |payment|
       if payment.voyager_fund_code.length > 10
-        log("WARNING: Generated voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code} payment: #{payment}")
+        log("WARNING: Generated voyager_fund_code is greater than 10 characters: #{payment.voyager_fund_code}\nPayment: #{payment.pretty_inspect}")
       end
 
       vendors = vendor_codes_by_accession.fetch(payment.accession_id, [])
 
       if vendors.length > 1
-        log("ACTION REQUIRED: Payment is associated with two or more vendors and will be skipped - vendors: #{vendors.to_a}, payment: #{payment}")
+        log("ACTION REQUIRED: Payment is associated with two or more vendors and will be skipped - vendors: #{vendors.to_a}\nPayment: #{payment.pretty_inspect}")
       elsif vendors.length == 0
-        log("ACTION REQUIRED: Payment skipped as vendor code missing: #{payment}")
+        log("ACTION REQUIRED: Payment skipped as vendor code missing:\n#{payment.pretty_inspect}")
       else
         payment.vendor_code = vendors.first
       end
@@ -144,12 +146,28 @@ class PendingPayments
       ].compact.join.gsub(/[^a-zA-Z0-9]/, '')
     end
 
+    def nice_map
+      result = (self.members - REDACTED).map {|k| [k, self[k]]}.to_h
+
+      result.keys.each do |k|
+        if result[k].is_a?(Date)
+          result[k] = result[k].iso8601
+        end
+      end
+
+      result
+    end
+
     def to_s
-      "#<Payment %s>" % [(self.members - REDACTED).map {|k| [k, self[k]]}.to_h]
+      "#<Payment %s>" % [nice_map]
     end
 
     def inspect
       to_s
+    end
+
+    def pretty_inspect
+      "#<Payment %s>" % [nice_map.pretty_inspect]
     end
   end
 

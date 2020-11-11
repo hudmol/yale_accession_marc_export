@@ -1,6 +1,8 @@
 require 'mail'
 require 'stringio'
 require 'set'
+require 'tempfile'
+require 'date'
 
 require_relative 'pending_payments'
 
@@ -12,12 +14,11 @@ class AccessionMarcExporter
   def self.run!
     Log.info("AccessionMarcExporter is off to the races!")
 
+    exporter = self.new
     MAX_RETRIES.times.each do |i|
-      exporter = self.new
-
       begin
         exporter.run_round!
-        exporter.notify!("success")
+        exporter.upload_log!("success")
 
         return
       rescue
@@ -27,41 +28,36 @@ class AccessionMarcExporter
 
         if i == MAX_RETRIES - 1
           exporter.log("\n\nTried #{MAX_RETRIES} times. Giving up for the day.")
+          exporter.upload_log!("errored")
+          return
         end
-
-        exporter.notify!("errored")
 
         sleep RETRY_WAIT
       end
     end
   end
 
-  def notify!(subject_suffix = "")
-    if AppConfig.has_key?(:yale_accession_marc_export_email_delivery_method)
-      @log ||= StringIO.new
+  def upload_log!(overall_status)
+    @log ||= StringIO.new
+    content = @log.string
 
-      email_content = @log.string
-      mail = Mail.new do
-        from(AppConfig[:yale_accession_marc_export_email_from_address])
-        to(AppConfig[:yale_accession_marc_export_email_to_address])
-        subject("AccessionMarcExporter report - #{subject_suffix}")
-        body(email_content)
-      end
+    Tempfile.create('export_log') do |temp|
+      temp.puts "#{Date.today} Overall job status: #{overall_status}\n\n"
+      temp.puts content.strip
+      temp.flush
 
-      mail.delivery_method(AppConfig[:yale_accession_marc_export_email_delivery_method],
-                           AppConfig[:yale_accession_marc_export_email_delivery_method_settings])
-
-      mail.deliver
-
-      @log.truncate(0)
+      upload_file(temp.path, "job_status-#{Date.today.iso8601}.txt")
     end
+
+    @log.truncate(0)
   end
 
   def run_round!
-    log(80.times.map{'*'}.join)
-    log("Running round at #{Time.now}")
-    log(80.times.map{'*'}.join)
-    log("\n")
+    log("%s\n%s\n%s" % [
+          80.times.map{'*'}.join,
+          "Running round at #{Time.now}",
+          80.times.map{'*'}.join
+        ])
 
     today = Date.today
 
@@ -75,38 +71,46 @@ class AccessionMarcExporter
 
       exports_by_vendor = {}
 
-      payments_to_process.each do |accession, vendor_code, payment|
-        log("Processing payment for vendor #{vendor_code}")
+      log("\nConverting payments to MARC\n===========================")
 
-        exports_by_vendor[vendor_code] ||= {
-          :marc => AccessionMARCExport.new(vendor_code, today),
-          :payments => [],
-          :failed => false,
-        }
+      log_indent do
+        payments_to_process.each do |accession, vendor_code, payment|
+          exports_by_vendor[vendor_code] ||= {
+            :marc => AccessionMARCExport.new(vendor_code, today),
+            :payments => [],
+            :failed => false,
+          }
 
-        export = exports_by_vendor.fetch(vendor_code)
-        unless export[:failed]
-          begin
-            export[:marc].add_payment(accession, payment)
-            export[:payments] << payment
-          rescue
-            log("Error caught during process for vendor #{vendor_code} payment #{payment}: #{$!}")
-            export[:failed] = $!
+          export = exports_by_vendor.fetch(vendor_code)
+          unless export[:failed]
+            begin
+              export[:marc].add_payment(accession, payment)
+              export[:payments] << payment
+
+              log("Converted payment for vendor #{vendor_code}")
+            rescue
+              log("Error caught during process for vendor #{vendor_code}\nPayment #{payment.pretty_inspect}: #{$!}")
+              export[:failed] = $!
+            end
           end
         end
       end
 
-      exports_by_vendor.each do |vendor_code, export|
-        next if export[:failed]
+      log("\nUploading MARC records and marking payments as processed\n========================================================")
 
-        DB.open do |db|
-          begin
-            upload_marc_export(export[:marc])
-            mark_payments_as_processed(db, export[:payments], today)
+      log_indent do
+        exports_by_vendor.each do |vendor_code, export|
+          next if export[:failed]
 
-            log("Processed #{export[:payments].length} #{pluralize('payment', '', 's', export[:payments].length)} for vendor #{vendor_code}")
-          ensure
-            export[:marc].finished!
+          DB.open do |db|
+            begin
+              upload_marc_export(export[:marc])
+              mark_payments_as_processed(db, export[:payments], today)
+
+              log("Processed #{export[:payments].length} #{pluralize('payment', '', 's', export[:payments].length)} for vendor #{vendor_code}")
+            ensure
+              export[:marc].finished!
+            end
           end
         end
       end
@@ -117,18 +121,30 @@ class AccessionMarcExporter
       end
     end
 
-    log("\n")
-    log(80.times.map{'*'}.join)
-    log("Finished round at #{Time.now}")
-    log(80.times.map{'*'}.join)
+    log("%s\n%s\n%s" % [
+          80.times.map{'*'}.join,
+          "Finished round at #{Time.now}",
+          80.times.map{'*'}.join
+        ])
+  end
+
+  def log_indent(&block)
+    @log_indent ||= 0
+    @log_indent += 2
+    begin
+      block.call
+    ensure
+      @log_indent -= 2
+    end
   end
 
   def log(message)
-    if AppConfig.has_key?(:yale_accession_marc_export_email_delivery_method)
-      @log ||= StringIO.new
-      @log << message
-      @log << "\n"
-    end
+    indent_str = (" " * (@log_indent || 0))
+
+    @log ||= StringIO.new
+    @log << "\n"
+    @log << indent_str + message.to_s.gsub("\n", "\n#{indent_str}")
+    @log << "\n"
 
     Log.info("%s: %s" % ['AccessionMarcExporter', message])
   end
@@ -158,22 +174,26 @@ class AccessionMarcExporter
 
 
   def upload_marc_export(marc)
+    upload_file(marc.file.path, marc.filename)
+  end
+
+  def upload_file(source_path, remote_target_file)
     if AppConfig[:yale_accession_marc_export_target].to_s == 's3'
-      log("Uploading file #{marc.filename} to S3")
+      log("Uploading file #{remote_target_file} to S3")
       @aws_uploader ||= AWSUploader.new
-      @aws_uploader.upload!(marc.filename, marc.file.path)
+      @aws_uploader.upload!(remote_target_file, source_path)
 
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'sftp'
-      log("Uploading file #{marc.filename} to SFTP")
+      log("Uploading file #{remote_target_file} to SFTP")
       @sftp_uploader ||= SFTPUploader.new
-      @sftp_uploader.upload!(marc.filename, marc.file.path)
+      @sftp_uploader.upload!(remote_target_file, source_path)
 
     elsif AppConfig[:yale_accession_marc_export_target].to_s == 'local'
-      log("Storing file #{marc.filename} locally at #{AppConfig[:yale_accession_marc_export_path]}")
+      log("Storing file #{remote_target_file} locally at #{AppConfig[:yale_accession_marc_export_path]}")
       unless File.directory?(AppConfig[:yale_accession_marc_export_path])
         FileUtils.mkdir_p(AppConfig[:yale_accession_marc_export_path])
       end
-      FileUtils.cp(marc.file.path, File.join(AppConfig[:yale_accession_marc_export_path], marc.filename))
+      FileUtils.cp(source_path, File.join(AppConfig[:yale_accession_marc_export_path], remote_target_file))
     else
       raise "AppConfig[:yale_accession_marc_export_target] value not supported: #{AppConfig[:yale_accession_marc_export_target]}"
     end
